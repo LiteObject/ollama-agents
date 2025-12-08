@@ -58,7 +58,7 @@ else:
         print("Install with: pip install python-dotenv")
 
 
-def message_to_dict(message) -> Dict[str, Any]:
+def message_to_dict(message: Message) -> Dict[str, Any]:
     """Convert a Message object to a dictionary for the conversation history."""
 
     result = {
@@ -90,7 +90,7 @@ def get_chat_response(
     *,
     model: str,
     messages: List[Dict[str, Any]],
-    tools,
+    tools: List[Any],
     think: bool = True,
 ) -> ChatResponse:
     """Call ollama.chat ensuring a concrete ChatResponse is returned.
@@ -113,7 +113,7 @@ def get_chat_response(
         RuntimeError: If chat() returns unexpected type or no message
     """
     # Call Ollama chat API with explicit non-streaming mode
-    result = chat(
+    result: ChatResponse = chat(
         model=model,
         messages=messages,
         tools=tools,
@@ -145,7 +145,7 @@ def get_chat_response(
     return cast(ChatResponse, last_with_message)
 
 
-def main():
+def main() -> int:
     """Main function to run the Ollama agent with web search capabilities.
 
     This function orchestrates the entire conversation flow:
