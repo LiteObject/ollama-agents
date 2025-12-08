@@ -96,34 +96,34 @@ Ollama is a tool that allows you to run open-source large language models (LLMs)
 Enter your question (or press Enter for default): What is the latest news about AI?
 
 --- Iteration 1 ---
-🤔 Thinking: I need to search for recent AI news to provide current information...
-🔧 Tool calls: 1
+Thinking: I need to search for recent AI news to provide current information...
+Tool calls: 1
   Tool 1: web_search
     Arguments: {'query': 'latest AI news 2024'}
-    ✅ Result (first 200 chars): Recent developments in artificial intelligence include...
-💬 Response: Based on my search, here are the latest developments in AI...
+    Result (first 200 chars): Recent developments in artificial intelligence include...
+Response: Based on my search, here are the latest developments in AI...
 ```
 
 ### Multi-turn Conversation
 ```
-🎯 Final response received. Would you like to ask another question?
+Final response received. Would you like to ask another question?
 
 Enter your next question (or 'quit'/'exit' to stop): Tell me more about that company
 
 --- Iteration 2 ---
-🤔 Thinking: The user wants more details about the company mentioned...
+Thinking: The user wants more details about the company mentioned...
 ```
 
 ### Web Search Not Configured
 ```
-⚠️  Note: Web search requires OLLAMA_API_KEY environment variable
+Note: Web search requires OLLAMA_API_KEY environment variable
    Sign up at https://ollama.com/ to get an API key for web search
 
 --- Iteration 1 ---
-🔧 Tool calls: 1
+Tool calls: 1
   Tool 1: web_search
-    ❌ Error executing tool web_search: Authorization header with Bearer token is required
-    💡 Web search requires an Ollama API key. To enable web search:
+    Error executing tool web_search: Authorization header with Bearer token is required
+    Web search requires an Ollama API key. To enable web search:
        1. Sign up at https://ollama.com/
        2. Create an API key from your account
        3. Set environment variable: export OLLAMA_API_KEY="your_api_key"
