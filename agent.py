@@ -155,6 +155,7 @@ def main() -> int:
     initial_question: str = input(
         "Enter your question (or press Enter for default): "
     ).strip()
+
     if not initial_question:
         initial_question = "what are the latest developments in AI?"
 
