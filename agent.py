@@ -10,58 +10,29 @@ and provides a user-friendly interface for multi-turn conversations.
 
 import os
 import sys
-from pathlib import Path
-from typing import Dict, Any, List, cast
+from typing import Any, Callable, Dict, List, Mapping, cast
 
 try:
-    from dotenv import load_dotenv  # type: ignore[import]
-except ImportError:  # pragma: no cover - optional dependency
-    load_dotenv = None  # type: ignore[assignment]
+    from dotenv import load_dotenv
+except ImportError:
+    print("Error: python-dotenv is required. Install with: pip install python-dotenv")
+    sys.exit(1)
 
 import ollama
 from ollama import chat, ChatResponse, Message, ResponseError, RequestError
 
 # Define available tools as a constant for easier configuration
-AVAILABLE_TOOLS = [ollama.web_search, ollama.web_fetch]
+AVAILABLE_TOOLS: List[Callable[..., Any]] = [ollama.web_search, ollama.web_fetch]
 
 
-def _load_env_file_fallback(env_path: Path) -> bool:
-    """Load key=value pairs from a .env file when python-dotenv is unavailable."""
-
-    if not env_path.exists():
-        return False
-
-    loaded_any = False
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and value and key not in os.environ:
-            os.environ[key] = value
-            loaded_any = True
-
-    return loaded_any
-
-
-if load_dotenv is not None:
-    load_dotenv(override=True)
-else:
-    ENV_FILE = Path(__file__).resolve().parent / ".env"
-    if _load_env_file_fallback(ENV_FILE):
-        print("Loaded environment variables from .env using fallback parser.")
-    else:
-        print("Warning: python-dotenv not installed and no .env file could be loaded.")
-        print("Install with: pip install python-dotenv")
+# Load environment variables from .env file
+load_dotenv(override=True)
 
 
 def message_to_dict(message: Message) -> Dict[str, Any]:
     """Convert a Message object to a dictionary for the conversation history."""
 
-    result = {
+    result: Dict[str, Any] = {
         "role": getattr(message, "role", "assistant"),
         "content": getattr(message, "content", "") or "",
     }
@@ -90,7 +61,7 @@ def get_chat_response(
     *,
     model: str,
     messages: List[Dict[str, Any]],
-    tools: List[Any],
+    tools: List[Callable[..., Any]],
     think: bool = True,
 ) -> ChatResponse:
     """Call ollama.chat ensuring a concrete ChatResponse is returned.
@@ -159,14 +130,16 @@ def main() -> int:
     """
     # Dictionary mapping tool names to their callable functions
     # These tools allow the LLM to search and fetch web content
-    available_tools = {tool.__name__: tool for tool in AVAILABLE_TOOLS}
+    available_tools: Dict[str, Callable[..., Any]] = {
+        tool.__name__: tool for tool in AVAILABLE_TOOLS
+    }
 
     # Display welcome message and instructions
     print("Ollama Agent with Web Search")
     print("Type 'quit' or 'exit' to stop the conversation")
 
     # Display model configuration
-    model_name = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
+    model_name: str = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
     print(f"Using model: {model_name}")
 
     # Check if API key is available for web search
@@ -179,7 +152,7 @@ def main() -> int:
     print("-" * 50)
 
     # Get the initial question from user (or use default)
-    initial_question = input(
+    initial_question: str = input(
         "Enter your question (or press Enter for default): "
     ).strip()
     if not initial_question:
@@ -191,9 +164,9 @@ def main() -> int:
 
     try:
         # Main conversation loop control variables
-        conversation_active = True
-        max_iterations = 10  # Safety limit to prevent infinite tool calling loops
-        iteration_count = 0
+        conversation_active: bool = True
+        max_iterations: int = 10  # Safety limit to prevent infinite tool calling loops
+        iteration_count: int = 0
 
         # Continue conversation until user quits or max iterations reached
         while conversation_active and iteration_count < max_iterations:
@@ -203,11 +176,11 @@ def main() -> int:
                 print(f"\n--- Iteration {iteration_count} ---")
 
                 # Get model name from environment variable with fallback
-                model_name = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
+                model_name: str = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
 
                 # Get LLM response using our normalized chat wrapper
                 # This handles the model's response and any tool calls it wants to make
-                response = get_chat_response(
+                response: ChatResponse = get_chat_response(
                     model=model_name,  # Ollama model name from env or default
                     messages=messages,  # Full conversation history
                     tools=AVAILABLE_TOOLS,  # Available tools for LLM
@@ -245,12 +218,12 @@ def main() -> int:
                         if function_to_call:
                             try:
                                 # Extract arguments and call the tool function
-                                args = tool_call.function.arguments
+                                args: Mapping[str, Any] = tool_call.function.arguments
                                 print(f"    Arguments: {args}")
-                                result = function_to_call(**args)
+                                result: Any = function_to_call(**args)
 
                                 # Show user a preview of the tool result
-                                result_str = str(result)
+                                result_str: str = str(result)
                                 print(
                                     f"    Result (first 200 chars): {result_str[:200]}..."
                                 )
@@ -274,7 +247,7 @@ def main() -> int:
                                 RuntimeError,  # Other runtime issues
                             ) as tool_error:
                                 # Handle tool execution errors gracefully
-                                error_msg = str(tool_error)
+                                error_msg: str = str(tool_error)
 
                                 # Provide specific help for web search authentication errors
                                 if (
@@ -335,7 +308,7 @@ def main() -> int:
                     )
 
                     # Get user's next input or exit
-                    user_input = input(
+                    user_input: str = input(
                         "\nEnter your next question (or 'quit'/'exit' to stop): "
                     ).strip()
 
