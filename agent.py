@@ -52,7 +52,7 @@ if load_dotenv is not None:
 else:
     ENV_FILE = Path(__file__).resolve().parent / ".env"
     if _load_env_file_fallback(ENV_FILE):
-        print("ℹ️  Loaded environment variables from .env using fallback parser.")
+        print("Loaded environment variables from .env using fallback parser.")
     else:
         print("Warning: python-dotenv not installed and no .env file could be loaded.")
         print("Install with: pip install python-dotenv")
