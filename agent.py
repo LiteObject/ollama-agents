@@ -48,7 +48,7 @@ def _load_env_file_fallback(env_path: Path) -> bool:
 
 
 if load_dotenv is not None:
-    load_dotenv()
+    load_dotenv(override=True)
 else:
     ENV_FILE = Path(__file__).resolve().parent / ".env"
     if _load_env_file_fallback(ENV_FILE):
