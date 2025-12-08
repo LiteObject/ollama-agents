@@ -167,14 +167,14 @@ def main():
 
     # Display model configuration
     model_name = os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
-    print(f"🤖 Using model: {model_name}")
+    print(f"Using model: {model_name}")
 
     # Check if API key is available for web search
     if not os.getenv("OLLAMA_API_KEY"):
-        print("⚠️  Note: Web search requires OLLAMA_API_KEY environment variable")
+        print("Note: Web search requires OLLAMA_API_KEY environment variable")
         print("   Sign up at https://ollama.com/ to get an API key for web search")
     else:
-        print("✅ Web search enabled with API key")
+        print("Web search enabled with API key")
 
     print("-" * 50)
 
@@ -220,11 +220,11 @@ def main():
                 # Show the model's internal thinking process (if enabled)
                 # This helps users understand how the model reasons through problems
                 if hasattr(message, "thinking") and message.thinking:
-                    print(f"🤔 Thinking: {message.thinking}")
+                    print(f"Thinking: {message.thinking}")
 
                 # Display the model's main response to the user
                 if hasattr(message, "content") and message.content:
-                    print(f"💬 Response: {message.content}")
+                    print(f"Response: {message.content}")
 
                 # Add the assistant's message to conversation history
                 # This maintains context for future turns in the conversation
@@ -233,7 +233,7 @@ def main():
                 # Process any tool calls the model wants to make
                 # Tools allow the model to search web, fetch content, etc.
                 if hasattr(message, "tool_calls") and message.tool_calls:
-                    print(f"🔧 Tool calls: {len(message.tool_calls)}")
+                    print(f"Tool calls: {len(message.tool_calls)}")
 
                     # Execute each tool call requested by the model
                     for i, tool_call in enumerate(message.tool_calls, 1):
@@ -252,7 +252,7 @@ def main():
                                 # Show user a preview of the tool result
                                 result_str = str(result)
                                 print(
-                                    f"    ✅ Result (first 200 chars): {result_str[:200]}..."
+                                    f"    Result (first 200 chars): {result_str[:200]}..."
                                 )
 
                                 # Add tool result to conversation for model to use
@@ -282,11 +282,11 @@ def main():
                                     in error_msg
                                 ):
                                     print(
-                                        f"    ❌ Error executing tool "
+                                        f"    Error executing tool "
                                         f"{tool_call.function.name}: {error_msg}"
                                     )
                                     print(
-                                        "    💡 Web search requires an Ollama API key. "
+                                        "    Web search requires an Ollama API key. "
                                         "To enable web search:"
                                     )
                                     print("       1. Sign up at https://ollama.com/")
@@ -304,7 +304,7 @@ def main():
                                     )
                                 else:
                                     print(
-                                        f"    ❌ Error executing tool "
+                                        f"    Error executing tool "
                                         f"{tool_call.function.name}: {error_msg}"
                                     )
 
@@ -319,7 +319,7 @@ def main():
                         else:
                             # Handle case where model requests unknown tool
                             error_msg = f"Tool {tool_call.function.name} not found"
-                            print(f"    ❌ {error_msg}")
+                            print(f"    {error_msg}")
                             messages.append(
                                 {
                                     "role": "tool",
@@ -331,7 +331,7 @@ def main():
                     # No tool calls means model gave a final answer
                     # Ask user if they want to continue the conversation
                     print(
-                        "\n🎯 Final response received. Would you like to ask another question?"
+                        "\nFinal response received. Would you like to ask another question?"
                     )
 
                     # Get user's next input or exit
@@ -342,7 +342,7 @@ def main():
                     # Check if user wants to quit
                     if user_input.lower() in ["quit", "exit", "q", ""]:
                         conversation_active = False
-                        print("👋 Conversation ended.")
+                        print("Conversation ended.")
                     else:
                         # Add new user message and reset iteration counter
                         # Reset counter allows new question to have full iterations
@@ -351,25 +351,25 @@ def main():
 
             except (ResponseError, RequestError) as api_error:
                 # Handle Ollama API specific errors (model not found, etc.)
-                print(f"❌ Ollama API Error: {api_error}")
+                print(f"Ollama API Error: {api_error}")
                 print("Please check that Ollama is running and the model is available.")
                 break  # Exit conversation loop but not the program
 
     except ConnectionError:
         # Handle case where Ollama service is not running
-        print("❌ Connection Error: Failed to connect to Ollama.")
+        print("Connection Error: Failed to connect to Ollama.")
         print("Please ensure Ollama is installed and running.")
         print("Visit https://ollama.com/download for installation instructions.")
         return 1  # Exit with error code
 
     except KeyboardInterrupt:
         # Handle Ctrl+C gracefully
-        print("\n👋 Conversation interrupted by user.")
+        print("\nConversation interrupted by user.")
         return 0  # Normal exit
 
     except (RuntimeError, ValueError) as e:
         # Handle other runtime errors
-        print(f"❌ Runtime error: {e}")
+        print(f"Runtime error: {e}")
         return 1  # Exit with error code
 
     return 0  # Normal exit - conversation completed successfully
