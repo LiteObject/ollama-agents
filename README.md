@@ -1,55 +1,33 @@
-# Ollama Demo - Interactive Agent with Web Search
+# Ollama Multi-Agent Framework
 
-This repository demonstrates how to build an intelligent agent using Ollama that can interact with users and perform web searches to answer questions.
+A configurable multi-agent orchestration framework built on Ollama, featuring YAML-based agent configuration, 17+ orchestration patterns, and comprehensive observability.
 
 ## What is Ollama?
 
 Ollama is a tool that allows you to run open-source large language models (LLMs) locally on your machine. It supports a variety of models, including Llama 2, Code Llama, Qwen, and others, bundling model weights, configuration, and data into a single package defined by a Modelfile.
 
-## Project Features
+## Features
 
-### Interactive AI Agent (agent.py)
+### Core Framework
+- **YAML Configuration**: Define agents declaratively in YAML files
+- **Plugin System**: Create custom tools with the `@tool` decorator
+- **Shared Context**: Inter-agent communication and variable passing
+- **17+ Orchestration Patterns**: Sequential, parallel, hierarchical, and more
+
+### Interactive Agent (agent.py)
 - **Multi-turn conversations**: Engage in ongoing dialogues with the AI
-- **Web search integration**: Agent can search the web and fetch content to answer questions
-- **Robust error handling**: Graceful handling of connection issues and API errors
-- **Type-safe implementation**: Full type hints and proper error handling
-- **User-friendly interface**: Clear progress indicators and formatted output
-- **Context management**: Smart truncation of results to prevent token overflow
-- **Environment variable support**: Built-in `.env` file parser (works even without python-dotenv)
+- **Web search integration**: Agent can search the web and fetch content
+- **Robust error handling**: Graceful handling of connection issues
+- **Environment variable support**: Configurable via `.env` file
 
-### Available Tools
-- **Web Search**: Search the internet for current information
-- **Web Fetch**: Retrieve and analyze content from specific URLs
-- **Thinking Mode**: See the AI's reasoning process
+### Observability
+- **Structured Logging**: JSON and human-readable log formats
+- **Event Hooks**: Subscribe to agent lifecycle events
+- **Context Tracking**: Session IDs and duration metrics
 
 ## Quick Start
 
-### Option 1: Using Docker (Recommended)
-
-1. **Start Ollama container**:
-   ```bash
-   docker-compose up -d
-   ```
-
-2. **Access the container**:
-   ```bash
-   docker exec -it ollama bash
-   ```
-
-3. **Install required model**:
-   ```bash
-   ollama pull gpt-oss:20b
-   ```
-
-4. **Set up web search (optional)**:
-   Follow the web search setup instructions in Option 2, step 4.
-
-5. **Run the agent**:
-   ```bash
-   python agent.py
-   ```
-
-### Option 2: Local Installation
+### Installation
 
 1. **Install Ollama**: Visit [ollama.com/download](https://ollama.com/download)
 
@@ -60,109 +38,200 @@ Ollama is a tool that allows you to run open-source large language models (LLMs)
 
 3. **Install required model**:
    ```bash
-   ollama pull gpt-oss:20b
+   ollama pull qwen3:14b
    ```
 
 4. **Set up configuration**:
-   Create a `.env` file in the project root:
    ```bash
    cp .env.example .env
    ```
-   Edit the `.env` file to configure your settings:
+   Edit `.env`:
    ```env
-   # Required for web search functionality
-   OLLAMA_API_KEY=your_actual_api_key_here
-   
-   # Optional: Specify which model to use (defaults to gpt-oss:20b)
-   OLLAMA_MODEL=gpt-oss:20b
+   OLLAMA_API_KEY=your_api_key_here
+   OLLAMA_MODEL=qwen3:14b
    ```
-   Sign up at [ollama.com](https://ollama.com/) to get an API key for web search functionality.
 
-5. **Install Python dependencies**:
+5. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
-   Note: `python-dotenv` is optional. The agent includes a fallback `.env` parser that works without it.
 
-6. **Run the agent**:
-   ```bash
-   python agent.py
-   ```
+### Run the Interactive Agent
+
+```bash
+python agent.py
+```
+
+### Run the Multi-Agent Demo
+
+```bash
+python main.py
+```
+
+## Architecture
+
+```
+ollama-demo/
+├── agent.py                    # Interactive single-agent CLI
+├── main.py                     # Multi-agent demo entry point
+├── core/
+│   ├── __init__.py             # Package exports
+│   ├── config.py               # AgentConfig dataclass
+│   ├── agent.py                # Reusable Agent class
+│   ├── context.py              # SharedContext for inter-agent comms
+│   ├── tools.py                # @tool decorator and ToolRegistry
+│   ├── orchestrator.py         # Multi-agent orchestration patterns
+│   └── observability/
+│       ├── __init__.py
+│       ├── logging.py          # Structured logging
+│       └── hooks.py            # Event hook system
+├── config/
+│   └── agents/
+│       ├── researcher.yaml     # Research specialist
+│       ├── analyst.yaml        # Analysis specialist
+│       └── writer.yaml         # Writing specialist
+├── tools/
+│   ├── builtin/                # Ollama built-in tools
+│   └── custom/                 # Custom tool plugins
+├── requirements.txt
+└── docker-compose.yml
+```
 
 ## Usage Examples
 
-### Basic Interaction
-```
-Enter your question (or press Enter for default): What is the latest news about AI?
+### 1. Define an Agent (YAML)
 
---- Iteration 1 ---
-Thinking: I need to search for recent AI news to provide current information...
-Tool calls: 1
-  Tool 1: web_search
-    Arguments: {'query': 'latest AI news 2024'}
-    Result (first 200 chars): Recent developments in artificial intelligence include...
-Response: Based on my search, here are the latest developments in AI...
-```
-
-### Multi-turn Conversation
-```
-Final response received. Would you like to ask another question?
-
-Enter your next question (or 'quit'/'exit' to stop): Tell me more about that company
-
---- Iteration 2 ---
-Thinking: The user wants more details about the company mentioned...
+```yaml
+# config/agents/researcher.yaml
+name: researcher
+model: qwen3:14b
+description: Research specialist with web access
+system_prompt: |
+  You are a research specialist. Use web search to find accurate information.
+tools:
+  - web_search
+  - web_fetch
+think: true
+max_iterations: 10
 ```
 
-### Web Search Not Configured
-```
-Note: Web search requires OLLAMA_API_KEY environment variable
-   Sign up at https://ollama.com/ to get an API key for web search
+### 2. Create Custom Tools
 
---- Iteration 1 ---
-Tool calls: 1
-  Tool 1: web_search
-    Error executing tool web_search: Authorization header with Bearer token is required
-    Web search requires an Ollama API key. To enable web search:
-       1. Sign up at https://ollama.com/
-       2. Create an API key from your account
-       3. Set environment variable: export OLLAMA_API_KEY="your_api_key"
-       4. Restart this application
+```python
+from core import tool
+
+@tool(name="calculate", description="Evaluate math expression")
+def calculate(expression: str) -> str:
+    """Safely evaluate a mathematical expression."""
+    return str(eval(expression))  # Use ast.literal_eval in production
 ```
+
+### 3. Orchestrate Multiple Agents
+
+```python
+from core import Orchestrator, AgentConfig
+
+# Create orchestrator
+orchestrator = Orchestrator()
+
+# Add agents from YAML
+orchestrator.add_agent_from_yaml("config/agents/researcher.yaml")
+orchestrator.add_agent_from_yaml("config/agents/writer.yaml")
+
+# Run sequential workflow
+result = orchestrator.run_sequential([
+    ("researcher", "Research the topic: {topic}"),
+    ("writer", "Write an article based on: {researcher_result}"),
+], initial_vars={"topic": "AI trends 2025"})
+```
+
+### 4. Use Event Hooks
+
+```python
+from core import AgentEvent, default_hook_registry
+
+def on_agent_complete(event_data):
+    print(f"Agent {event_data.agent_name} completed in {event_data.duration_ms}ms")
+
+default_hook_registry.on(AgentEvent.AGENT_END, on_agent_complete)
+```
+
+### 5. Configure Logging
+
+```python
+from core import configure_logging
+
+# JSON logs to file, colored console output
+configure_logging(
+    level="INFO",
+    log_file="logs/agent.log",
+    json_format=False,
+    use_colors=True,
+)
+```
+
+## Orchestration Patterns
+
+| Pattern | Method | Description |
+|---------|--------|-------------|
+| Sequential | `run_sequential()` | Chain agents, pass outputs |
+| Parallel | `run_parallel()` | Run agents concurrently |
+| Conditional | `run_conditional()` | Branch based on output |
+| Loop | `run_loop()` | Repeat until condition met |
+| Hierarchical | `run_hierarchical()` | Supervisor delegates to workers |
+| Map-Reduce | `run_map_reduce()` | Process items, then aggregate |
+| Pipeline | `run_pipeline()` | Chain with optional filters |
+| Voting | `run_voting()` | Multiple agents vote |
+| Debate | `run_debate()` | Agents argue, moderator concludes |
+| Supervisor | `run_supervisor()` | Review and request revisions |
+| Router | `run_router()` | Classify and route to specialist |
+| Ensemble | `run_ensemble()` | Combine with weighting |
+| State Machine | `run_state_machine()` | FSM with transitions |
+| Event-Driven | `run_event_driven()` | Process via handlers |
+| Critic | `run_critic()` | Creator-critic loop |
+| Planner-Executor | `run_planner_executor()` | Plan then execute |
+| Chain-of-Thought | `run_chain_of_thought()` | Explicit reasoning steps |
+
+## Event Types
+
+Subscribe to these events via `EventHookRegistry`:
+
+| Event | When Triggered |
+|-------|----------------|
+| `AGENT_CREATED` | Agent instantiated |
+| `AGENT_START` | Agent begins processing |
+| `AGENT_END` | Agent completes |
+| `AGENT_ERROR` | Agent encounters error |
+| `TOOL_CALL_START` | Tool execution begins |
+| `TOOL_CALL_END` | Tool execution completes |
+| `TOOL_CALL_ERROR` | Tool execution fails |
+| `ORCHESTRATION_START` | Workflow begins |
+| `ORCHESTRATION_END` | Workflow completes |
+| `ORCHESTRATION_STEP` | Individual step in workflow |
+| `MESSAGE_SENT` | Message sent to model |
+| `MESSAGE_RECEIVED` | Response received |
 
 ## Dependencies
 
-See [requirements.txt](requirements.txt) for the complete list of Python dependencies:
-
 ### Required
-- `ollama>=0.6.0` - Official Ollama Python SDK (includes web search support)
-- `httpx>=0.28.1` - HTTP client for web requests
-- `pydantic>=2.11.9` - Data validation and type safety
+- `ollama>=0.6.0` - Ollama Python SDK
+- `httpx>=0.28.1` - HTTP client
+- `pydantic>=2.11.9` - Data validation
+- `PyYAML>=6.0.2` - YAML configuration
+- `python-dotenv` - Environment variables
 
-### Optional
-- `python-dotenv` - Automatic `.env` file loading (agent includes fallback parser)
+## Docker Setup
 
-## Project Structure
+```bash
+# Start Ollama container
+docker-compose up -d
 
+# Pull model
+docker exec -it ollama ollama pull qwen3:14b
+
+# Run agent
+python agent.py
 ```
-├── agent.py              # Main interactive agent with web search
-├── docker-compose.yml    # Docker setup for Ollama service
-├── requirements.txt      # Python dependencies
-├── .env                  # Environment variables (API keys) - not tracked in git
-├── .env.example          # Example environment file
-├── README.md             # This file
-└── .gitignore            # Git ignore rules
-```
-
-## Key Features of the Agent
-
-- **Robust Error Handling**: Handles connection issues, API errors, and tool failures
-- **Interactive Loop**: Supports multi-turn conversations with context retention (max 10 iterations per question)
-- **Web Integration**: Can search and fetch web content in real-time
-- **Thinking Mode**: Shows the AI's reasoning process
-- **Performance Optimized**: Smart context management (8000 char limit for tool results)
-- **User-Friendly**: Clear feedback with emojis, progress indicators, and easy exit options
-- **Fallback Support**: Works even without python-dotenv using built-in `.env` parser
 
 ## Troubleshooting
 
@@ -175,47 +244,21 @@ See [requirements.txt](requirements.txt) for the complete list of Python depende
 
 2. **Model Not Found**: Install the required model
    ```bash
-   ollama pull gpt-oss:20b
+   ollama pull qwen3:14b
    ```
 
-3. **Web Search Authentication Error**: Web search requires an API key
-   - Sign up at [ollama.com](https://ollama.com/)
-   - Create an API key from your account dashboard
-   - Add it to your `.env` file: `OLLAMA_API_KEY=your_api_key`
-   - Or set environment variable: `export OLLAMA_API_KEY="your_api_key"`
-   - The agent will work without web search if no API key is provided
+3. **Web Search Auth Error**: Add API key to `.env`
+   ```env
+   OLLAMA_API_KEY=your_api_key
+   ```
 
-4. **Different Model**: To use a different model
-   - Set `OLLAMA_MODEL=your_model_name` in your `.env` file
-   - Or set environment variable: `export OLLAMA_MODEL="your_model_name"`
-   - Make sure the model is available: `ollama pull your_model_name`
-
-5. **Import Warning**: If you see "python-dotenv not installed" warning
-   - Install it with: `pip install python-dotenv`
-   - Or ignore it - the agent includes a fallback `.env` parser
-
-### Getting Help
-
-- Verify Ollama installation at [ollama.com](https://ollama.com)
-- Ensure all dependencies are installed: `pip install -r requirements.txt`
-- Check Ollama service status: `ollama list` to see available models
-- For Docker users: `docker-compose logs` to check container status
-
-## How It Works
-
-The agent follows this conversation flow:
-
-1. **User Input**: Accept question from user
-2. **LLM Processing**: Send to GPT-OSS model with thinking enabled
-3. **Tool Detection**: Model decides if web search/fetch is needed
-4. **Tool Execution**: Run requested tools (with authentication if configured)
-5. **Result Integration**: Add tool results to conversation context
-6. **Response Generation**: Model generates final answer using all information
-7. **Iteration Check**: Continue if more tools needed (max 10 iterations)
-8. **User Continuation**: Ask if user wants to continue conversation
+4. **Import Errors**: Install all dependencies
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 ## References
 
 - [Ollama Official Repository](https://github.com/ollama/ollama)
-- [Ollama Python SDK Documentation](https://github.com/ollama/ollama-python)
+- [Ollama Python SDK](https://github.com/ollama/ollama-python)
 - [Available Models](https://ollama.com/library)
