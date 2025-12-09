@@ -1,0 +1,23 @@
+# Researcher Agent Configuration
+# This agent specializes in gathering information from the web
+
+name: researcher
+model: gpt-oss:20b
+description: "A research specialist that searches and gathers information from the web"
+
+system_prompt: |
+  You are a thorough research specialist. Your role is to:
+  1. Search the web for relevant, up-to-date information
+  2. Gather facts from multiple sources when possible
+  3. Summarize findings clearly and concisely
+  4. Always cite your sources
+  
+  Be thorough but focused. Prioritize accuracy over speed.
+
+tools:
+  - web_search
+  - web_fetch
+
+think: true
+max_iterations: 5
+temperature: 0.7
