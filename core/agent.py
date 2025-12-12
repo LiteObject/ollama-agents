@@ -102,7 +102,8 @@ class Agent:
             AgentEvent.AGENT_CREATED,
             agent_name=self.name,
             session_id=self.session_id,
-            data={"model": self.model, "tools": self.config.tools},
+            model=self.model,
+            tools=self.config.tools,
         )
         self._logger.info(
             "Agent created",
@@ -217,7 +218,8 @@ class Agent:
             AgentEvent.TOOL_CALL_START,
             agent_name=self.name,
             session_id=self.session_id,
-            data={"tool": tool_name, "arguments": dict(arguments)},
+            tool=tool_name,
+            arguments=dict(arguments),
         )
         self._logger.debug(
             f"Executing tool: {tool_name}",
@@ -238,7 +240,8 @@ class Agent:
                 agent_name=self.name,
                 session_id=self.session_id,
                 duration_ms=duration_ms,
-                data={"tool": tool_name, "result_length": len(result_str)},
+                tool=tool_name,
+                result_length=len(result_str),
             )
             self._logger.debug(
                 f"Tool completed: {tool_name}",
@@ -258,7 +261,7 @@ class Agent:
                 session_id=self.session_id,
                 duration_ms=duration_ms,
                 error=e,
-                data={"tool": tool_name},
+                tool=tool_name,
             )
             self._logger.error(
                 f"Tool error: {tool_name} - {e}",
@@ -293,7 +296,7 @@ class Agent:
             AgentEvent.AGENT_START,
             agent_name=self.name,
             session_id=self.session_id,
-            data={"prompt_length": len(prompt)},
+            prompt_length=len(prompt),
         )
         self._logger.info(
             "Agent starting",
@@ -318,7 +321,8 @@ class Agent:
             AgentEvent.MESSAGE_SENT,
             agent_name=self.name,
             session_id=self.session_id,
-            data={"role": "user", "content_length": len(interpolated_prompt)},
+            role="user",
+            content_length=len(interpolated_prompt),
         )
 
         iteration = 0
@@ -354,13 +358,11 @@ class Agent:
                     AgentEvent.MESSAGE_RECEIVED,
                     agent_name=self.name,
                     session_id=self.session_id,
-                    data={
-                        "role": "assistant",
-                        "content_length": len(content),
-                        "has_tool_calls": bool(
-                            hasattr(message, "tool_calls") and message.tool_calls
-                        ),
-                    },
+                    role="assistant",
+                    content_length=len(content),
+                    has_tool_calls=bool(
+                        hasattr(message, "tool_calls") and message.tool_calls
+                    ),
                 )
 
                 # Handle tool calls
@@ -455,10 +457,8 @@ class Agent:
             agent_name=self.name,
             session_id=self.session_id,
             duration_ms=duration_ms,
-            data={
-                "iterations": iteration,
-                "response_length": len(final_response),
-            },
+            iterations=iteration,
+            response_length=len(final_response),
         )
         self._logger.info(
             "Agent completed",
