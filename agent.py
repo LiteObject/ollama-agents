@@ -8,7 +8,7 @@ The agent maintains conversation context, handles tool calls automatically,
 and provides a user-friendly interface for multi-turn conversations.
 """
 
-# pylint: disable=too-many-locals, too-many-nested-blocks, too-many-branches, too-many-statements, duplicate-code
+# pylint: disable=too-many-locals, too-many-nested-blocks, too-many-branches, too-many-statements, duplicate-code, wrong-import-position
 
 import os
 import sys
@@ -20,15 +20,14 @@ except ImportError:
     print("Error: python-dotenv is required. Install with: pip install python-dotenv")
     sys.exit(1)
 
+# Load environment variables from .env file
+load_dotenv(override=True)
+
 import ollama
 from ollama import chat, ChatResponse, Message, ResponseError, RequestError
 
 # Define available tools as a constant for easier configuration
 AVAILABLE_TOOLS: List[Callable[..., Any]] = [ollama.web_search, ollama.web_fetch]
-
-
-# Load environment variables from .env file
-load_dotenv(override=True)
 
 
 def message_to_dict(message: Message) -> Dict[str, Any]:
