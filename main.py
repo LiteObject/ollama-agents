@@ -11,6 +11,7 @@ This script demonstrates how to use the multi-agent framework to:
 Usage:
     python main.py
 """
+# pylint: disable=wrong-import-position
 
 import os
 import sys
@@ -29,7 +30,7 @@ load_dotenv(override=True)
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from core import Agent, AgentConfig, Orchestrator, SharedContext, ToolRegistry
+from core import Agent, AgentConfig, Orchestrator
 
 
 def demo_single_agent() -> None:
@@ -89,7 +90,7 @@ def demo_orchestrator() -> None:
             try:
                 agent = orchestrator.add_agent_from_yaml(yaml_file)
                 print(f"Loaded agent: {agent.name}")
-            except Exception as e:
+            except (FileNotFoundError, ValueError, KeyError) as e:
                 print(f"Failed to load {yaml_file}: {e}")
     else:
         # Fallback to programmatic configs
@@ -253,7 +254,7 @@ def main() -> int:
     except KeyboardInterrupt:
         print("\n\nInterrupted by user.")
         return 0
-    except Exception as e:
+    except (ValueError, RuntimeError, IOError) as e:
         print(f"\nError: {e}")
         return 1
 

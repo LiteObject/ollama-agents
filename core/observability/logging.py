@@ -5,6 +5,8 @@ This module provides structured logging with context injection,
 making it easy to trace agent interactions and debug issues.
 """
 
+# pylint: disable=too-many-arguments, too-many-positional-arguments
+
 import json
 import logging
 import sys

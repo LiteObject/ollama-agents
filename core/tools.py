@@ -209,7 +209,7 @@ class ToolRegistry:
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     # Tools are auto-registered via the @tool decorator
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 print(f"Warning: Failed to load tool module {py_file}: {e}")
 
         # Reload global registry after discovery

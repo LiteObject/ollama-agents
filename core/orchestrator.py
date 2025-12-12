@@ -5,119 +5,38 @@ This module provides an Orchestrator class that manages the execution
 of multiple agents in various patterns: sequential, parallel, conditional, etc.
 """
 
-import concurrent.futures
-import time
-import uuid
-from dataclasses import dataclass
-from enum import Enum
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+# pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-public-methods, too-many-instance-attributes
 
-import yaml
+import uuid
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from core.agent import Agent
 from core.config import AgentConfig
 from core.context import SharedContext
 from core.observability.hooks import (
-    AgentEvent,
     EventHookRegistry,
     default_hook_registry,
 )
 from core.observability.logging import AgentLogger, get_logger
+from core.patterns.conditional import ConditionalHandler
+from core.patterns.loop import LoopHandler
+from core.patterns.parallel import ParallelHandler
+from core.patterns.sequential import SequentialHandler
+from core.patterns.hierarchical import HierarchicalHandler
+from core.patterns.map_reduce import MapReduceHandler
+from core.patterns.pipeline import PipelineHandler
+from core.patterns.voting import VotingHandler
+from core.patterns.debate import DebateHandler
+from core.patterns.retry import RetryHandler
+from core.patterns.chain_of_thought import ChainOfThoughtHandler
+from core.patterns.supervisor import SupervisorHandler
+from core.patterns.state_machine import StateMachineHandler
+from core.patterns.router import RouterHandler
+from core.patterns.ensemble import EnsembleHandler
+from core.patterns.event_driven import EventDrivenHandler
 from core.tools import ToolRegistry, default_registry
-
-
-class ExecutionPattern(Enum):
-    """Supported execution patterns for orchestration."""
-
-    SEQUENTIAL = "sequential"
-    PARALLEL = "parallel"
-    CONDITIONAL = "conditional"
-    LOOP = "loop"
-    HIERARCHICAL = "hierarchical"
-    MAP_REDUCE = "map_reduce"
-    PIPELINE = "pipeline"
-    VOTING = "voting"
-    DEBATE = "debate"
-    # Phase 2 patterns
-    SUPERVISOR = "supervisor"
-    STATE_MACHINE = "state_machine"
-    ROUTER = "router"
-    ENSEMBLE = "ensemble"
-    EVENT_DRIVEN = "event_driven"
-
-
-@dataclass
-class WorkflowStep:
-    """A single step in a workflow.
-
-    Attributes:
-        agent: Name of the agent to execute
-        prompt: Prompt template (can include {variable} placeholders)
-        output_var: Variable name to store the output
-        condition: Optional condition for execution (for conditional patterns)
-        max_loops: Maximum iterations (for loop patterns)
-        loop_condition: Condition to continue looping
-    """
-
-    agent: str
-    prompt: str
-    output_var: Optional[str] = None
-    condition: Optional[str] = None
-    max_loops: int = 5
-    loop_condition: Optional[str] = None
-
-
-@dataclass
-class Workflow:
-    """A workflow definition with multiple steps.
-
-    Attributes:
-        name: Workflow name
-        description: Human-readable description
-        steps: List of workflow steps
-        pattern: Execution pattern
-    """
-
-    name: str
-    steps: List[WorkflowStep]
-    description: str = ""
-    pattern: ExecutionPattern = ExecutionPattern.SEQUENTIAL
-
-    @classmethod
-    def from_yaml(cls, path: Path | str) -> "Workflow":
-        """Load workflow from YAML file.
-
-        Args:
-            path: Path to YAML file
-
-        Returns:
-            Workflow instance
-        """
-        path = Path(path)
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-
-        steps = [
-            WorkflowStep(
-                agent=s["agent"],
-                prompt=s["prompt"],
-                output_var=s.get("output_var"),
-                condition=s.get("condition"),
-                max_loops=s.get("max_loops", 5),
-                loop_condition=s.get("loop_condition"),
-            )
-            for s in data.get("steps", [])
-        ]
-
-        pattern = ExecutionPattern(data.get("pattern", "sequential"))
-
-        return cls(
-            name=data.get("name", "unnamed"),
-            description=data.get("description", ""),
-            steps=steps,
-            pattern=pattern,
-        )
+from core.workflow import ExecutionPattern, Workflow
 
 
 class Orchestrator:
@@ -162,6 +81,31 @@ class Orchestrator:
         self.session_id = session_id or str(uuid.uuid4())
         self._agents: Dict[str, Agent] = {}
         self._configs: Dict[str, AgentConfig] = {}
+
+        # Initialize pattern handlers
+        self._handlers = {
+            ExecutionPattern.SEQUENTIAL: SequentialHandler(self),
+            ExecutionPattern.PARALLEL: ParallelHandler(self),
+            ExecutionPattern.CONDITIONAL: ConditionalHandler(self),
+            ExecutionPattern.LOOP: LoopHandler(self),
+            ExecutionPattern.HIERARCHICAL: HierarchicalHandler(self),
+            ExecutionPattern.MAP_REDUCE: MapReduceHandler(self),
+            ExecutionPattern.PIPELINE: PipelineHandler(self),
+            ExecutionPattern.VOTING: VotingHandler(self),
+            ExecutionPattern.DEBATE: DebateHandler(self),
+            ExecutionPattern.SUPERVISOR: SupervisorHandler(self),
+            ExecutionPattern.STATE_MACHINE: StateMachineHandler(self),
+            ExecutionPattern.ROUTER: RouterHandler(self),
+            ExecutionPattern.ENSEMBLE: EnsembleHandler(self),
+            ExecutionPattern.EVENT_DRIVEN: EventDrivenHandler(self),
+        }
+        # Note: Retry and ChainOfThought are not in ExecutionPattern enum yet or are helper methods
+        # But I can add them to handlers if I want to use them via run_workflow or similar
+        # For now, I'll just instantiate them when needed or add them to a separate dict
+        # if they are not in Enum
+
+        self._retry_handler = RetryHandler(self)
+        self._cot_handler = ChainOfThoughtHandler(self)
 
         # Set up logging
         self._logger: AgentLogger = get_logger(
@@ -265,77 +209,8 @@ class Orchestrator:
         Returns:
             Final agent's response
         """
-        start_time = time.perf_counter()
-        pattern = "sequential"
-
-        # Trigger orchestration start event
-        self._hooks.trigger(
-            AgentEvent.ORCHESTRATION_START,
-            session_id=self.session_id,
-            data={"pattern": pattern, "steps": len(steps)},
-        )
-        self._logger.info(
-            f"Starting {pattern} orchestration",
-            pattern=pattern,
-            extra={"steps": len(steps)},
-        )
-
-        # Set initial variables
-        if initial_vars:
-            for key, value in initial_vars.items():
-                self._context.set(key, value)
-
-        last_output = ""
-
-        for step_num, (agent_name, prompt_template) in enumerate(steps, 1):
-            if verbose:
-                print(f"\n{'='*50}")
-                print(f"Running agent: {agent_name}")
-                print(f"{'='*50}")
-
-            # Trigger step event
-            self._hooks.trigger(
-                AgentEvent.ORCHESTRATION_STEP,
-                session_id=self.session_id,
-                agent_name=agent_name,
-                data={"step": step_num, "pattern": pattern},
-            )
-            self._logger.debug(
-                f"Executing step {step_num}: {agent_name}",
-                step=step_num,
-                agent_name=agent_name,
-                pattern=pattern,
-            )
-
-            agent = self._agents.get(agent_name)
-            if not agent:
-                raise ValueError(f"Agent '{agent_name}' not found")
-
-            # Interpolate prompt with context
-            prompt = self._context.interpolate(prompt_template)
-
-            # Run agent
-            last_output = agent.run(prompt, context=self._context, verbose=verbose)
-
-            if verbose:
-                print(f"\n[{agent_name}] Output: {last_output[:500]}...")
-
-        duration_ms = (time.perf_counter() - start_time) * 1000
-
-        # Trigger orchestration end event
-        self._hooks.trigger(
-            AgentEvent.ORCHESTRATION_END,
-            session_id=self.session_id,
-            duration_ms=duration_ms,
-            data={"pattern": pattern, "steps_completed": len(steps)},
-        )
-        self._logger.info(
-            f"Completed {pattern} orchestration",
-            duration_ms=duration_ms,
-            pattern=pattern,
-        )
-
-        return last_output
+        handler = self._handlers[ExecutionPattern.SEQUENTIAL]
+        return handler.execute(steps=steps, initial_vars=initial_vars, verbose=verbose)
 
     def run_parallel(
         self,
@@ -353,59 +228,10 @@ class Orchestrator:
         Returns:
             Dictionary of agent_name -> response
         """
-        start_time = time.perf_counter()
-        pattern = "parallel"
-
-        # Trigger orchestration start event
-        self._hooks.trigger(
-            AgentEvent.ORCHESTRATION_START,
-            session_id=self.session_id,
-            data={"pattern": pattern, "agents": list(agent_prompts.keys())},
+        handler = self._handlers[ExecutionPattern.PARALLEL]
+        return handler.execute(
+            agent_prompts=agent_prompts, verbose=verbose, max_workers=max_workers
         )
-        self._logger.info(
-            f"Starting {pattern} orchestration",
-            pattern=pattern,
-            extra={"agents": list(agent_prompts.keys())},
-        )
-
-        results: Dict[str, str] = {}
-
-        def run_single(name: str, prompt: str) -> tuple[str, str]:
-            agent = self._agents.get(name)
-            if not agent:
-                return name, f"Error: Agent '{name}' not found"
-            interpolated = self._context.interpolate(prompt)
-            return name, agent.run(interpolated, context=self._context, verbose=verbose)
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(run_single, name, prompt): name
-                for name, prompt in agent_prompts.items()
-            }
-
-            for future in concurrent.futures.as_completed(futures):
-                name, result = future.result()
-                results[name] = result
-
-                if verbose:
-                    print(f"\n[{name}] Completed: {result[:200]}...")
-
-        duration_ms = (time.perf_counter() - start_time) * 1000
-
-        # Trigger orchestration end event
-        self._hooks.trigger(
-            AgentEvent.ORCHESTRATION_END,
-            session_id=self.session_id,
-            duration_ms=duration_ms,
-            data={"pattern": pattern, "agents_completed": len(results)},
-        )
-        self._logger.info(
-            f"Completed {pattern} orchestration",
-            duration_ms=duration_ms,
-            pattern=pattern,
-        )
-
-        return results
 
     def run_conditional(
         self,
@@ -427,28 +253,14 @@ class Orchestrator:
         Returns:
             Final response
         """
-        # Get condition result
-        condition_result = self.run_agent(condition_agent, condition_prompt, verbose)
-        condition_result_lower = condition_result.lower().strip()
-
-        if verbose:
-            print(f"\n[Conditional] Condition result: {condition_result_lower}")
-
-        # Find matching branch
-        for condition, (agent_name, prompt) in branches.items():
-            if condition.lower() in condition_result_lower:
-                if verbose:
-                    print(f"[Conditional] Taking branch: {condition}")
-                return self.run_agent(agent_name, prompt, verbose)
-
-        # Use default branch if provided
-        if default_branch:
-            agent_name, prompt = default_branch
-            if verbose:
-                print("[Conditional] Taking default branch")
-            return self.run_agent(agent_name, prompt, verbose)
-
-        return condition_result
+        handler = self._handlers[ExecutionPattern.CONDITIONAL]
+        return handler.execute(
+            condition_agent=condition_agent,
+            condition_prompt=condition_prompt,
+            branches=branches,
+            default_branch=default_branch,
+            verbose=verbose,
+        )
 
     def run_loop(
         self,
@@ -470,34 +282,14 @@ class Orchestrator:
         Returns:
             Final response
         """
-        agent = self._agents.get(agent_name)
-        if not agent:
-            raise ValueError(f"Agent '{agent_name}' not found")
-
-        last_output = ""
-        iteration = 0
-
-        while iteration < max_iterations:
-            iteration += 1
-
-            # Set iteration variable
-            self._context.set("iteration", iteration)
-            self._context.set("last_output", last_output)
-
-            prompt = self._context.interpolate(prompt_template)
-
-            if verbose:
-                print(f"\n[Loop] Iteration {iteration}")
-
-            last_output = agent.run(prompt, context=self._context, verbose=verbose)
-
-            # Check condition
-            if not condition_fn(last_output, iteration):
-                if verbose:
-                    print("[Loop] Condition met, stopping")
-                break
-
-        return last_output
+        handler = self._handlers[ExecutionPattern.LOOP]
+        return handler.execute(
+            agent_name=agent_name,
+            prompt_template=prompt_template,
+            condition_fn=condition_fn,
+            max_iterations=max_iterations,
+            verbose=verbose,
+        )
 
     def run_workflow(self, workflow: Workflow, verbose: bool = False) -> str:
         """Run a complete workflow.
@@ -519,7 +311,7 @@ class Orchestrator:
             steps = [(step.agent, step.prompt) for step in workflow.steps]
             return self.run_sequential(steps, verbose=verbose)
 
-        elif workflow.pattern == ExecutionPattern.PARALLEL:
+        if workflow.pattern == ExecutionPattern.PARALLEL:
             prompts = {step.agent: step.prompt for step in workflow.steps}
             results = self.run_parallel(prompts, verbose=verbose)
             # Return all results combined
@@ -527,12 +319,21 @@ class Orchestrator:
                 f"[{name}]: {result}" for name, result in results.items()
             )
 
-        elif workflow.pattern == ExecutionPattern.PIPELINE:
-            stages = [(step.agent, step.prompt, None) for step in workflow.steps]
+        if workflow.pattern == ExecutionPattern.PIPELINE:
+            stages_list: List[tuple[str, str, None]] = [
+                (step.agent, step.prompt, None) for step in workflow.steps
+            ]
             initial_input = self._context.get("pipeline_input", "")
-            return self.run_pipeline(stages, str(initial_input), verbose=verbose)
+            # Cast to satisfy type checker (None is valid for Optional[Callable])
+            return self.run_pipeline(
+                cast(
+                    List[tuple[str, str, Optional[Callable[[str], bool]]]], stages_list
+                ),
+                str(initial_input),
+                verbose=verbose,
+            )
 
-        elif workflow.pattern == ExecutionPattern.VOTING:
+        if workflow.pattern == ExecutionPattern.VOTING:
             if not workflow.steps:
                 raise ValueError("Voting workflow requires at least one step")
             # First step defines voters, last step (if different) is aggregator
@@ -550,8 +351,7 @@ class Orchestrator:
             )
             return result.get("consensus", str(result.get("votes", "")))
 
-        else:
-            raise NotImplementedError(f"Pattern {workflow.pattern} not yet implemented")
+        raise NotImplementedError(f"Pattern {workflow.pattern} not yet implemented")
 
     def run_hierarchical(
         self,
@@ -576,44 +376,14 @@ class Orchestrator:
         Returns:
             Final aggregated response
         """
-        if verbose:
-            print(f"\n[Hierarchical] Supervisor: {supervisor_agent}")
-            print(f"[Hierarchical] Workers: {worker_agents}")
-
-        # Supervisor analyzes and creates sub-tasks
-        delegation_prompt = (
-            f"Analyze this task and create specific sub-tasks for each worker.\n"
-            f"Workers available: {', '.join(worker_agents)}\n"
-            f"Task: {task_prompt}\n\n"
-            f"Output format: For each worker, provide their specific sub-task."
+        handler = self._handlers[ExecutionPattern.HIERARCHICAL]
+        return handler.execute(
+            supervisor_agent=supervisor_agent,
+            worker_agents=worker_agents,
+            task_prompt=task_prompt,
+            aggregation_prompt=aggregation_prompt,
+            verbose=verbose,
         )
-        delegation = self.run_agent(supervisor_agent, delegation_prompt, verbose)
-        self._context.set("delegation", delegation)
-
-        if verbose:
-            print(f"\n[Hierarchical] Delegation: {delegation[:300]}...")
-
-        # Workers execute in parallel
-        worker_prompts = {
-            worker: f"Your assignment from the supervisor:\n{delegation}\n\n"
-            f"Original task: {task_prompt}\n\n"
-            f"Complete your part of the task."
-            for worker in worker_agents
-        }
-        worker_results = self.run_parallel(worker_prompts, verbose=verbose)
-
-        # Store worker results
-        for worker, result in worker_results.items():
-            self._context.set(f"{worker}_result", result)
-
-        # Supervisor aggregates results
-        results_summary = "\n\n".join(
-            f"[{worker}]: {result}" for worker, result in worker_results.items()
-        )
-        self._context.set("worker_results", results_summary)
-
-        final_prompt = self._context.interpolate(aggregation_prompt)
-        return self.run_agent(supervisor_agent, final_prompt, verbose)
 
     def run_map_reduce(
         self,
@@ -639,46 +409,16 @@ class Orchestrator:
         Returns:
             Reduced result
         """
-        if verbose:
-            print(f"\n[Map-Reduce] Mapping {len(items)} items with '{mapper_agent}'")
-
-        mapper = self._agents.get(mapper_agent)
-        if not mapper:
-            raise ValueError(f"Mapper agent '{mapper_agent}' not found")
-
-        # Map phase - process items in parallel
-        mapped_results: List[str] = []
-
-        def map_item(item: str, index: int) -> tuple[int, str]:
-            self._context.set("item", item)
-            self._context.set("item_index", index)
-            prompt = self._context.interpolate(map_prompt_template)
-            result = mapper.run(prompt, context=self._context, verbose=False)
-            return index, result
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(map_item, item, i) for i, item in enumerate(items)
-            ]
-            results = [f.result() for f in concurrent.futures.as_completed(futures)]
-            # Sort by index to maintain order
-            results.sort(key=lambda x: x[0])
-            mapped_results = [r[1] for r in results]
-
-        if verbose:
-            print(f"[Map-Reduce] Map phase complete, {len(mapped_results)} results")
-
-        # Reduce phase
-        combined = "\n\n---\n\n".join(
-            f"Item {i+1}: {result}" for i, result in enumerate(mapped_results)
+        handler = self._handlers[ExecutionPattern.MAP_REDUCE]
+        return handler.execute(
+            mapper_agent=mapper_agent,
+            reducer_agent=reducer_agent,
+            items=items,
+            map_prompt_template=map_prompt_template,
+            reduce_prompt_template=reduce_prompt_template,
+            max_workers=max_workers,
+            verbose=verbose,
         )
-        self._context.set("mapped_results", combined)
-        reduce_prompt = self._context.interpolate(reduce_prompt_template)
-
-        if verbose:
-            print(f"[Map-Reduce] Reducing with '{reducer_agent}'")
-
-        return self.run_agent(reducer_agent, reduce_prompt, verbose)
 
     def run_pipeline(
         self,
@@ -700,34 +440,12 @@ class Orchestrator:
         Returns:
             Final output or last successful stage output
         """
-        if verbose:
-            print(f"\n[Pipeline] Starting with {len(stages)} stages")
-
-        self._context.set("pipeline_input", initial_input)
-        current_output = initial_input
-
-        for i, stage in enumerate(stages):
-            agent_name = stage[0]
-            prompt_template = stage[1]
-            filter_fn = stage[2] if len(stage) > 2 else None
-
-            if verbose:
-                print(f"\n[Pipeline] Stage {i+1}: {agent_name}")
-
-            self._context.set("stage_input", current_output)
-            self._context.set("stage_number", i + 1)
-            prompt = self._context.interpolate(prompt_template)
-
-            current_output = self.run_agent(agent_name, prompt, verbose)
-            self._context.set(f"stage_{i+1}_output", current_output)
-
-            # Apply filter if present
-            if filter_fn and not filter_fn(current_output):
-                if verbose:
-                    print(f"[Pipeline] Filter stopped at stage {i+1}")
-                break
-
-        return current_output
+        handler = self._handlers[ExecutionPattern.PIPELINE]
+        return handler.execute(
+            stages=stages,
+            initial_input=initial_input,
+            verbose=verbose,
+        )
 
     def run_voting(
         self,
@@ -752,30 +470,14 @@ class Orchestrator:
         Returns:
             Dictionary with 'votes' and optionally 'consensus'
         """
-        if verbose:
-            print(f"\n[Voting] {len(voter_agents)} agents voting")
-
-        # Get all votes in parallel
-        voter_prompts = {agent: prompt for agent in voter_agents}
-        votes = self.run_parallel(voter_prompts, verbose=verbose)
-
-        result: Dict[str, Any] = {"votes": votes}
-
-        # Aggregate if aggregator is provided
-        if aggregator_agent and aggregation_prompt:
-            votes_summary = "\n\n".join(
-                f"[{agent}] voted: {vote}" for agent, vote in votes.items()
-            )
-            self._context.set("votes", votes_summary)
-            consensus_prompt = self._context.interpolate(aggregation_prompt)
-            result["consensus"] = self.run_agent(
-                aggregator_agent, consensus_prompt, verbose
-            )
-
-            if verbose:
-                print(f"\n[Voting] Consensus: {result['consensus'][:200]}...")
-
-        return result
+        handler = self._handlers[ExecutionPattern.VOTING]
+        return handler.execute(
+            voter_agents=voter_agents,
+            prompt=prompt,
+            aggregator_agent=aggregator_agent,
+            aggregation_prompt=aggregation_prompt,
+            verbose=verbose,
+        )
 
     def run_debate(
         self,
@@ -799,57 +501,14 @@ class Orchestrator:
         Returns:
             Dictionary with 'debate_history' and optionally 'conclusion'
         """
-        if verbose:
-            print(f"\n[Debate] Topic: {topic}")
-            print(f"[Debate] Debaters: {debater_agents}, Rounds: {rounds}")
-
-        debate_history: List[Dict[str, str]] = []
-        previous_arguments = ""
-
-        for round_num in range(1, rounds + 1):
-            if verbose:
-                print(f"\n[Debate] === Round {round_num} ===")
-
-            for debater in debater_agents:
-                if round_num == 1 and debater == debater_agents[0]:
-                    prompt = (
-                        f"You are debating the topic: {topic}\n\n"
-                        f"Present your opening argument."
-                    )
-                else:
-                    prompt = (
-                        f"Topic: {topic}\n\n"
-                        f"Previous arguments:\n{previous_arguments}\n\n"
-                        f"Respond to the previous arguments and strengthen your position."
-                    )
-
-                response = self.run_agent(debater, prompt, verbose)
-                debate_history.append(
-                    {"round": round_num, "agent": debater, "argument": response}
-                )
-                previous_arguments += f"\n\n[{debater}]: {response}"
-
-                if verbose:
-                    print(f"\n[{debater}]: {response[:300]}...")
-
-        result: Dict[str, Any] = {"debate_history": debate_history}
-
-        # Moderator conclusion
-        if moderator_agent:
-            conclusion_prompt = (
-                f"You are moderating a debate on: {topic}\n\n"
-                f"Full debate:\n{previous_arguments}\n\n"
-                f"Provide a balanced summary and declare the stronger arguments."
-            )
-            result["conclusion"] = self.run_agent(
-                moderator_agent, conclusion_prompt, verbose
-            )
-
-            if verbose:
-                print(f"\n[Moderator Conclusion]: {result['conclusion'][:300]}...")
-
-        self._context.set("debate_history", previous_arguments)
-        return result
+        handler = self._handlers[ExecutionPattern.DEBATE]
+        return handler.execute(
+            debater_agents=debater_agents,
+            topic=topic,
+            moderator_agent=moderator_agent,
+            rounds=rounds,
+            verbose=verbose,
+        )
 
     def run_retry(
         self,
@@ -876,31 +535,13 @@ class Orchestrator:
         Returns:
             Tuple of (successful_agent_name, output)
         """
-        agents_to_try = [primary_agent] + (fallback_agents or [])
-
-        for agent_name in agents_to_try:
-            if verbose:
-                print(f"\n[Retry] Trying agent: {agent_name}")
-
-            for attempt in range(1, max_retries + 1):
-                if verbose:
-                    print(f"[Retry] Attempt {attempt}/{max_retries}")
-
-                self._context.set("retry_attempt", attempt)
-                interpolated_prompt = self._context.interpolate(prompt)
-                output = self.run_agent(agent_name, interpolated_prompt, verbose)
-
-                if validator_fn(output):
-                    if verbose:
-                        print("[Retry] Validation passed!")
-                    return agent_name, output
-
-                if verbose:
-                    print("[Retry] Validation failed, retrying...")
-
-        # All agents failed
-        raise RuntimeError(
-            f"All agents failed validation after retries: {agents_to_try}"
+        return self._retry_handler.execute(
+            primary_agent=primary_agent,
+            prompt=prompt,
+            validator_fn=validator_fn,
+            fallback_agents=fallback_agents,
+            max_retries=max_retries,
+            verbose=verbose,
         )
 
     def run_chain_of_thought(
@@ -921,42 +562,12 @@ class Orchestrator:
         Returns:
             Dictionary with 'steps' and 'final_answer'
         """
-        if verbose:
-            print(f"\n[Chain-of-Thought] Problem: {problem[:100]}...")
-
-        steps: List[str] = []
-        previous_thinking = ""
-
-        for step in range(1, thinking_steps + 1):
-            if step == 1:
-                prompt = (
-                    f"Problem: {problem}\n\n"
-                    f"Step {step}/{thinking_steps}: Break down this problem. "
-                    f"What are the key components we need to address?"
-                )
-            elif step == thinking_steps:
-                prompt = (
-                    f"Problem: {problem}\n\n"
-                    f"Previous thinking:\n{previous_thinking}\n\n"
-                    f"Step {step}/{thinking_steps}: Based on your analysis, "
-                    f"provide the final answer or solution."
-                )
-            else:
-                prompt = (
-                    f"Problem: {problem}\n\n"
-                    f"Previous thinking:\n{previous_thinking}\n\n"
-                    f"Step {step}/{thinking_steps}: Continue your analysis. "
-                    f"What insights can you derive?"
-                )
-
-            if verbose:
-                print(f"\n[CoT] Step {step}/{thinking_steps}")
-
-            response = self.run_agent(agent_name, prompt, verbose)
-            steps.append(response)
-            previous_thinking += f"\nStep {step}: {response}"
-
-        return {"steps": steps, "final_answer": steps[-1]}
+        return self._cot_handler.execute(
+            agent_name=agent_name,
+            problem=problem,
+            thinking_steps=thinking_steps,
+            verbose=verbose,
+        )
 
     # =========================================================================
     # Phase 2: Advanced Orchestration Patterns
@@ -989,84 +600,16 @@ class Orchestrator:
         Returns:
             Dictionary with 'final_output', 'revision_history', 'total_revisions'
         """
-        if verbose:
-            print(f"\n[Supervisor] Task: {task[:100]}...")
-            print(
-                f"[Supervisor] Worker: {worker_agent}, Max revisions: {max_revisions}"
-            )
-
-        revision_history: List[Dict[str, str]] = []
-        current_output = ""
-        feedback = ""
-
-        for revision in range(max_revisions + 1):
-            # Worker creates or revises
-            if revision == 0:
-                worker_prompt = f"Complete this task:\n\n{task}"
-            else:
-                worker_prompt = (
-                    f"Original task: {task}\n\n"
-                    f"Your previous work:\n{current_output}\n\n"
-                    f"Supervisor feedback:\n{feedback}\n\n"
-                    f"Please revise your work based on this feedback."
-                )
-
-            if verbose:
-                print(f"\n[Supervisor] Revision {revision}: Worker producing output...")
-
-            current_output = self.run_agent(worker_agent, worker_prompt, verbose)
-
-            # Check quality threshold if provided
-            if quality_threshold:
-                quality = quality_threshold(current_output)
-                if verbose:
-                    print(f"[Supervisor] Quality score: {quality:.2f}")
-                if quality >= min_quality:
-                    revision_history.append(
-                        {
-                            "revision": revision,
-                            "output": current_output,
-                            "feedback": "Passed quality threshold",
-                            "quality": quality,
-                        }
-                    )
-                    break
-
-            # Supervisor reviews
-            review_prompt = (
-                f"Review this work for the task: {task}\n\n"
-                f"Work submitted:\n{current_output}\n\n"
-                f"Provide feedback. If the work is satisfactory, respond with 'APPROVED'. "
-                f"Otherwise, provide specific feedback for improvement."
-            )
-
-            if verbose:
-                print("[Supervisor] Supervisor reviewing...")
-
-            feedback = self.run_agent(supervisor_agent, review_prompt, verbose)
-
-            revision_history.append(
-                {
-                    "revision": revision,
-                    "output": current_output,
-                    "feedback": feedback,
-                }
-            )
-
-            # Check if approved
-            if "APPROVED" in feedback.upper():
-                if verbose:
-                    print("[Supervisor] Work approved!")
-                break
-
-            if verbose:
-                print(f"[Supervisor] Feedback: {feedback[:200]}...")
-
-        return {
-            "final_output": current_output,
-            "revision_history": revision_history,
-            "total_revisions": len(revision_history) - 1,
-        }
+        handler = self._handlers[ExecutionPattern.SUPERVISOR]
+        return handler.execute(
+            supervisor_agent=supervisor_agent,
+            worker_agent=worker_agent,
+            task=task,
+            max_revisions=max_revisions,
+            quality_threshold=quality_threshold,
+            min_quality=min_quality,
+            verbose=verbose,
+        )
 
     def run_router(
         self,
@@ -1088,50 +631,14 @@ class Orchestrator:
         Returns:
             Dictionary with 'classification', 'route_taken', 'response'
         """
-        if verbose:
-            print("\n[Router] Classifying input...")
-
-        # Build classification prompt
-        categories = list(routes.keys())
-        classify_prompt = (
-            f"Classify the following input into one of these categories: "
-            f"{', '.join(categories)}\n\n"
-            f"Input: {input_prompt}\n\n"
-            f"Respond with ONLY the category name, nothing else."
+        handler = self._handlers[ExecutionPattern.ROUTER]
+        return handler.execute(
+            router_agent=router_agent,
+            routes=routes,
+            input_prompt=input_prompt,
+            default_route=default_route,
+            verbose=verbose,
         )
-
-        classification = self.run_agent(router_agent, classify_prompt, verbose)
-        classification = classification.strip().lower()
-
-        if verbose:
-            print(f"[Router] Classification: {classification}")
-
-        # Find matching route
-        route_taken = None
-        for category, (agent_name, prompt_template) in routes.items():
-            if category.lower() in classification:
-                route_taken = category
-                self._context.set("user_input", input_prompt)
-                self._context.set("classification", classification)
-                prompt = self._context.interpolate(prompt_template)
-                response = self.run_agent(agent_name, prompt, verbose)
-                break
-        else:
-            # No match, use default
-            if default_route:
-                route_taken = "default"
-                agent_name, prompt_template = default_route
-                self._context.set("user_input", input_prompt)
-                prompt = self._context.interpolate(prompt_template)
-                response = self.run_agent(agent_name, prompt, verbose)
-            else:
-                response = f"Unable to route input. Classification: {classification}"
-
-        return {
-            "classification": classification,
-            "route_taken": route_taken,
-            "response": response,
-        }
 
     def run_ensemble(
         self,
@@ -1155,62 +662,15 @@ class Orchestrator:
         Returns:
             Dictionary with 'individual_responses', 'combined_response', 'weights'
         """
-        if verbose:
-            print(f"\n[Ensemble] Running {len(agents)} agents...")
-
-        # Get all responses in parallel
-        agent_prompts = {agent: prompt for agent in agents}
-        individual_responses = self.run_parallel(agent_prompts, verbose=verbose)
-
-        # Apply weights if provided
-        weights = weights or {agent: 1.0 for agent in agents}
-
-        result: Dict[str, Any] = {
-            "individual_responses": individual_responses,
-            "weights": weights,
-        }
-
-        # Combine responses
-        if combiner_agent:
-            if combination_strategy == "synthesize":
-                combine_prompt = (
-                    f"Multiple experts have provided responses to: {prompt}\n\n"
-                    + "\n\n".join(
-                        f"[Expert {i+1} (weight: {weights.get(agent, 1.0)})]: {resp}"
-                        for i, (agent, resp) in enumerate(individual_responses.items())
-                    )
-                    + "\n\nSynthesize these responses into a single comprehensive answer, "
-                    "giving more weight to higher-weighted experts."
-                )
-            elif combination_strategy == "best":
-                combine_prompt = (
-                    f"Multiple experts have provided responses to: {prompt}\n\n"
-                    + "\n\n".join(
-                        f"[Expert {i+1}]: {resp}"
-                        for i, resp in enumerate(individual_responses.values())
-                    )
-                    + "\n\nSelect the BEST response and explain why it's superior."
-                )
-            else:  # merge
-                combine_prompt = (
-                    f"Multiple experts have provided responses to: {prompt}\n\n"
-                    + "\n\n".join(
-                        f"[Expert {i+1}]: {resp}"
-                        for i, resp in enumerate(individual_responses.values())
-                    )
-                    + "\n\nMerge all unique information from these responses."
-                )
-
-            result["combined_response"] = self.run_agent(
-                combiner_agent, combine_prompt, verbose
-            )
-        else:
-            # Just concatenate if no combiner
-            result["combined_response"] = "\n\n---\n\n".join(
-                f"[{agent}]: {resp}" for agent, resp in individual_responses.items()
-            )
-
-        return result
+        handler = self._handlers[ExecutionPattern.ENSEMBLE]
+        return handler.execute(
+            agents=agents,
+            prompt=prompt,
+            weights=weights,
+            combiner_agent=combiner_agent,
+            combination_strategy=combination_strategy,
+            verbose=verbose,
+        )
 
     def run_state_machine(
         self,
@@ -1237,68 +697,14 @@ class Orchestrator:
         Returns:
             Dictionary with 'final_state', 'state_history', 'final_output'
         """
-        if verbose:
-            print(f"\n[StateMachine] Starting in state: {initial_state}")
-            print(f"[StateMachine] Available states: {list(states.keys())}")
-
-        current_state = initial_state
-        state_history: List[Dict[str, Any]] = []
-        current_output = ""
-        self._context.set("input_data", input_data)
-
-        for transition in range(max_transitions):
-            if current_state not in states:
-                raise ValueError(f"Unknown state: {current_state}")
-
-            state_config = states[current_state]
-            agent_name = state_config["agent"]
-            prompt_template = state_config["prompt"]
-            transitions = state_config.get("transitions", {})
-
-            if verbose:
-                print(
-                    f"\n[StateMachine] State: {current_state} (transition {transition + 1})"
-                )
-
-            # Run agent for current state
-            self._context.set("current_state", current_state)
-            self._context.set("previous_output", current_output)
-            prompt = self._context.interpolate(prompt_template)
-            current_output = self.run_agent(agent_name, prompt, verbose)
-
-            state_history.append(
-                {
-                    "state": current_state,
-                    "agent": agent_name,
-                    "output": current_output,
-                }
-            )
-
-            # Determine next state
-            next_state = None
-            output_lower = current_output.lower()
-
-            for condition, target_state in transitions.items():
-                if condition == "*":  # Wildcard - always matches
-                    next_state = target_state
-                    break
-                elif condition.lower() in output_lower:
-                    next_state = target_state
-                    break
-
-            if next_state is None or next_state == "END":
-                if verbose:
-                    print("[StateMachine] Reached terminal state or END")
-                break
-
-            current_state = next_state
-
-        return {
-            "final_state": current_state,
-            "state_history": state_history,
-            "final_output": current_output,
-            "total_transitions": len(state_history),
-        }
+        handler = self._handlers[ExecutionPattern.STATE_MACHINE]
+        return handler.execute(
+            states=states,
+            initial_state=initial_state,
+            input_data=input_data,
+            max_transitions=max_transitions,
+            verbose=verbose,
+        )
 
     def run_event_driven(
         self,
@@ -1316,53 +722,12 @@ class Orchestrator:
         Returns:
             Dictionary with 'processed_events', 'unhandled_events', 'outputs'
         """
-        if verbose:
-            print(f"\n[EventDriven] Processing {len(events)} events...")
-            print(f"[EventDriven] Registered handlers: {list(event_handlers.keys())}")
-
-        processed_events: List[Dict[str, Any]] = []
-        unhandled_events: List[Dict[str, Any]] = []
-        outputs: List[str] = []
-
-        for event in events:
-            event_type = event.get("type", "unknown")
-            event_data = event.get("data", {})
-
-            if verbose:
-                print(f"\n[EventDriven] Event: {event_type}")
-
-            if event_type in event_handlers:
-                agent_name, prompt_template = event_handlers[event_type]
-
-                # Set event data in context
-                self._context.set("event_type", event_type)
-                self._context.set("event_data", str(event_data))
-                for key, value in event_data.items():
-                    self._context.set(f"event_{key}", str(value))
-
-                prompt = self._context.interpolate(prompt_template)
-                output = self.run_agent(agent_name, prompt, verbose)
-
-                processed_events.append(
-                    {
-                        "event": event,
-                        "handler": agent_name,
-                        "output": output,
-                    }
-                )
-                outputs.append(output)
-            else:
-                unhandled_events.append(event)
-                if verbose:
-                    print(f"[EventDriven] No handler for event type: {event_type}")
-
-        return {
-            "processed_events": processed_events,
-            "unhandled_events": unhandled_events,
-            "outputs": outputs,
-            "total_processed": len(processed_events),
-            "total_unhandled": len(unhandled_events),
-        }
+        handler = self._handlers[ExecutionPattern.EVENT_DRIVEN]
+        return handler.execute(
+            event_handlers=event_handlers,
+            events=events,
+            verbose=verbose,
+        )
 
     def run_critic(
         self,
@@ -1392,6 +757,7 @@ class Orchestrator:
 
         improvement_history: List[Dict[str, str]] = []
         current_work = ""
+        critique = ""  # Initialize critique for first round
 
         for round_num in range(1, max_rounds + 1):
             if verbose:

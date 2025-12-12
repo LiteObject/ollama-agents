@@ -4,7 +4,7 @@ A configurable multi-agent orchestration framework built on Ollama, featuring YA
 
 ## What is Ollama?
 
-Ollama is a tool that allows you to run open-source large language models (LLMs) locally on your machine. It supports a variety of models, including Llama 2, Code Llama, Qwen, and others, bundling model weights, configuration, and data into a single package defined by a Modelfile.
+Ollama is a tool that allows you to run open-source large language models (LLMs) locally on your machine. It supports a variety of models, including llama, gpt-oss, qwen, and others, bundling model weights, configuration, and data into a single package defined by a Modelfile.
 
 ## Features
 
@@ -81,6 +81,7 @@ ollama-demo/
 │   ├── context.py              # SharedContext for inter-agent comms
 │   ├── tools.py                # @tool decorator and ToolRegistry
 │   ├── orchestrator.py         # Multi-agent orchestration patterns
+│   ├── patterns/               # Pattern implementation handlers
 │   └── observability/
 │       ├── __init__.py
 │       ├── logging.py          # Structured logging

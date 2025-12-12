@@ -62,6 +62,11 @@ class SharedContext:
         self._artifacts: Dict[str, Any] = {}
         self._agent_outputs: Dict[str, str] = {}
 
+    @property
+    def variables(self) -> Dict[str, Any]:
+        """Get a copy of all variables."""
+        return self._variables.copy()
+
     # --- Variable Management ---
 
     def set(self, key: str, value: Any) -> None:

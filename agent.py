@@ -8,6 +8,8 @@ The agent maintains conversation context, handles tool calls automatically,
 and provides a user-friendly interface for multi-turn conversations.
 """
 
+# pylint: disable=too-many-locals, too-many-nested-blocks, too-many-branches, too-many-statements, duplicate-code
+
 import os
 import sys
 from typing import Any, Callable, Dict, List, Mapping, cast

@@ -5,6 +5,8 @@ This module provides a reusable Agent class that wraps Ollama models
 with tool-calling capabilities and shared context support.
 """
 
+# pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-positional-arguments, too-many-locals, too-many-branches, too-many-statements
+
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Mapping, Optional, cast

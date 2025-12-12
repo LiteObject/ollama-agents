@@ -5,9 +5,11 @@ This module provides dataclasses for agent configuration and utilities
 for loading configurations from YAML files.
 """
 
+# pylint: disable=too-many-instance-attributes
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import yaml
 
