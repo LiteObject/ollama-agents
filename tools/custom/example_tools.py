@@ -4,16 +4,59 @@ Example custom tool demonstrating the @tool decorator.
 This module shows how to create custom tools that agents can use.
 """
 
+import ast
+import operator as op
 import random
+from collections.abc import Callable
 from datetime import datetime
 
-# Import from parent to avoid circular imports
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from core.tools import tool
+
+
+BinaryOp = Callable[[float, float], float]
+UnaryOp = Callable[[float], float]
+
+
+_BIN_OPS: dict[type[ast.operator], BinaryOp] = {
+    ast.Add: op.add,
+    ast.Sub: op.sub,
+    ast.Mult: op.mul,
+    ast.Div: op.truediv,
+    ast.Pow: op.pow,
+    ast.Mod: op.mod,
+}
+
+_UNARY_OPS: dict[type[ast.unaryop], UnaryOp] = {
+    ast.UAdd: op.pos,
+    ast.USub: op.neg,
+}
+
+
+def _safe_eval_arithmetic(expression: str) -> float:
+    parsed = ast.parse(expression, mode="eval")
+
+    def _eval(node: ast.AST) -> float:
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return float(node.value)
+
+        if isinstance(node, ast.BinOp):
+            op_type = type(node.op)
+            if op_type not in _BIN_OPS:
+                raise ValueError("Unsupported operator")
+            return _BIN_OPS[op_type](_eval(node.left), _eval(node.right))
+
+        if isinstance(node, ast.UnaryOp):
+            op_type = type(node.op)
+            if op_type not in _UNARY_OPS:
+                raise ValueError("Unsupported unary operator")
+            return _UNARY_OPS[op_type](_eval(node.operand))
+
+        raise ValueError("Unsupported expression")
+
+    return _eval(parsed)
 
 
 @tool(name="get_current_time", description="Get the current date and time")
@@ -34,15 +77,10 @@ def calculate(expression: str) -> str:
         The result of the calculation
     """
     try:
-        # Only allow safe operations
-        allowed = set("0123456789+-*/.(). ")
-        if not all(c in allowed for c in expression):
-            return "Error: Only basic arithmetic operations are allowed"
-
-        result = eval(expression)  # Safe because we validated input
+        result = _safe_eval_arithmetic(expression)
         return str(result)
-    except Exception as e:
-        return f"Error: {e}"
+    except (SyntaxError, ValueError, TypeError, ZeroDivisionError) as exc:
+        return f"Error: {exc}"
 
 
 @tool(name="generate_id", description="Generate a unique identifier")
@@ -86,4 +124,6 @@ def summarize_list(items: str, separator: str = ",") -> str:
         Summary of the list
     """
     item_list = [item.strip() for item in items.split(separator) if item.strip()]
-    return f"Found {len(item_list)} items: {', '.join(item_list[:5])}{'...' if len(item_list) > 5 else ''}"
+    preview = ", ".join(item_list[:5])
+    suffix = "..." if len(item_list) > 5 else ""
+    return f"Found {len(item_list)} items: {preview}{suffix}"
