@@ -83,19 +83,40 @@ def web_search_smart(query: str, max_results: int = 10) -> Any:
     else:
         enhanced_query = query
 
-    # Call Ollama's web search
-    return ollama.web_search(query=enhanced_query, max_results=max_results)
+    # Call Ollama's web search with error handling
+    try:
+        return ollama.web_search(query=enhanced_query, max_results=max_results)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        error_msg = str(e)
+        if "Authorization" in error_msg or "API key" in error_msg.lower():
+            return f"Error: Web search requires an Ollama API key. Please set OLLAMA_API_KEY."
+        return f"Error searching for '{query}': {error_msg}"
 
 
 def web_fetch_smart(url: str) -> Any:
-    """Fetch content from a URL.
+    """Fetch content from a URL with graceful error handling.
 
-    This is a passthrough to ollama.web_fetch for consistency.
+    This wrapper catches HTTP errors (404, 403, timeouts, etc.) and returns
+    an error message instead of raising an exception. This allows the agent
+    to continue the conversation even if a fetch fails.
 
     Args:
         url: The URL to fetch content from
 
     Returns:
-        Content from the URL
+        Content from the URL, or an error message string if fetch failed
     """
-    return ollama.web_fetch(url=url)
+    try:
+        return ollama.web_fetch(url=url)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        error_msg = str(e)
+        # Provide helpful error messages based on common HTTP errors
+        if "404" in error_msg:
+            return f"Error: URL not found (404) - {url} may be unavailable or blocked."
+        if "403" in error_msg:
+            return f"Error: Access forbidden (403) - {url} blocked the request."
+        if "timeout" in error_msg.lower():
+            return f"Error: Request timed out - {url} took too long to respond."
+        if "connection" in error_msg.lower():
+            return f"Error: Connection failed - could not reach {url}."
+        return f"Error fetching {url}: {error_msg}"
