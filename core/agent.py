@@ -1,8 +1,14 @@
 """
-Agent class for AI-powered conversational agents.
+Agent class for multi-agent orchestration framework.
 
-This module provides a reusable Agent class that wraps Ollama models
-with tool-calling capabilities and shared context support.
+This module provides the Agent class—the core runtime component that executes
+agent configurations within the multi-agent framework. It handles the full
+conversation loop including tool calls, event hooks, structured logging,
+and context sharing between agents.
+
+The Agent class is designed to work with AgentConfig (configuration) and
+Orchestrator (multi-agent coordination) for running orchestration patterns
+like sequential, parallel, voting, debate, and more.
 """
 
 # pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-positional-arguments, too-many-locals, too-many-branches, too-many-statements
@@ -32,27 +38,48 @@ from core.tools import ToolRegistry, default_registry
 
 
 class Agent:
-    """A configurable AI agent powered by Ollama.
+    """A configurable AI agent powered by Ollama for multi-agent orchestration.
 
-    This class provides a high-level interface for creating conversational
-    agents with tool-calling capabilities. Agents can be configured via
-    YAML files or programmatically.
+    This class is the core runtime component of the multi-agent framework. It takes
+    an AgentConfig and executes it by managing the full conversation loop including
+    tool calls, event hooks, structured logging, and context sharing.
+
+    Key Features:
+    - Loads tools from the registry and Ollama's builtin tools (web_search, web_fetch)
+    - Handles automatic tool calling and result integration
+    - Triggers lifecycle events (agent_start, agent_end, tool_call_start, etc.)
+    - Supports structured logging with session IDs and duration metrics
+    - Shares context with other agents via SharedContext
+    - Works seamlessly with Orchestrator for multi-agent patterns
+
+    This class is designed for multi-agent orchestration workflows (sequential,
+    parallel, voting, etc.). For a standalone single-agent CLI, use the root
+    agent.py instead.
 
     Usage:
-        # From config
+        # From YAML config
         config = AgentConfig.from_yaml("config/agents/researcher.yaml")
         agent = Agent(config)
-        response = agent.run("What are the latest AI trends?")
+        response = agent.run("What are the latest AI trends?", verbose=True)
 
-        # Programmatic
+        # Programmatic config
         agent = Agent(
             config=AgentConfig(
                 name="researcher",
-                model="gpt-oss:20b",
+                model="qwen3:14b",
                 system_prompt="You are a research specialist.",
                 tools=["web_search", "web_fetch"],
+                max_iterations=5,
             )
         )
+        response = agent.run("Research AI trends")
+
+        # With orchestrator
+        orchestrator = Orchestrator()
+        orchestrator.add_agent(config)
+        result = orchestrator.run_sequential([
+            ("researcher", "Research: {topic}"),
+        ])
     """
 
     def __init__(
@@ -281,7 +308,7 @@ class Agent:
         This method handles the full conversation loop including tool calls.
 
         Args:
-            prompt: The user's prompt/question
+            prompt: The user prompt/question
             context: Optional shared context (uses instance context if not provided)
             verbose: Whether to print progress information
 
