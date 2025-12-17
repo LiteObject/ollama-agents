@@ -15,9 +15,9 @@ like sequential, parallel, voting, debate, and more.
 
 import time
 import uuid
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Mapping, Optional, cast
 
-import ollama
 from ollama import (
     chat,
     ChatResponse,
@@ -105,7 +105,16 @@ class Agent:
         self.config = config
         self.name = config.name
         self.model = config.model
-        self.system_prompt = config.system_prompt
+
+        # Inject current date into system prompt so the model knows today's date
+        # (LLMs don't inherently know the current date from their training cutoff)
+        today = datetime.now().strftime("%B %d, %Y")
+        date_context = f"Today's date is {today}."
+        if config.system_prompt:
+            self.system_prompt = f"{date_context}\n\n{config.system_prompt}"
+        else:
+            self.system_prompt = date_context
+
         self.think = config.think
         self.max_iterations = config.max_iterations
         self.session_id = session_id or str(uuid.uuid4())
@@ -153,15 +162,21 @@ class Agent:
             if tool_name in builtin_tools:
                 tool_func = builtin_tools[tool_name]
                 self._tools.append(tool_func)
-                self._tool_map[tool_name] = tool_func
-                self._logger.debug(f"Loaded builtin tool: {tool_name}")
+                # Use function's actual name since that's what Ollama presents to the LLM
+                actual_name = tool_func.__name__
+                self._tool_map[actual_name] = tool_func
+                self._logger.debug(f"Loaded builtin tool: {tool_name} -> {actual_name}")
             else:
                 # Check registry
                 tool_func = self._registry.get_function(tool_name)
                 if tool_func:
                     self._tools.append(tool_func)
-                    self._tool_map[tool_name] = tool_func
-                    self._logger.debug(f"Loaded registry tool: {tool_name}")
+                    # Use function's actual name for consistency
+                    actual_name = getattr(tool_func, "__name__", tool_name)
+                    self._tool_map[actual_name] = tool_func
+                    self._logger.debug(
+                        f"Loaded registry tool: {tool_name} -> {actual_name}"
+                    )
                 else:
                     self._logger.warning(f"Tool '{tool_name}' not found")
 

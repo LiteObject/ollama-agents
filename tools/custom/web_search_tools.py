@@ -89,7 +89,7 @@ def web_search_smart(query: str, max_results: int = 10) -> Any:
     except Exception as e:  # pylint: disable=broad-exception-caught
         error_msg = str(e)
         if "Authorization" in error_msg or "API key" in error_msg.lower():
-            return f"Error: Web search requires an Ollama API key. Please set OLLAMA_API_KEY."
+            return "Error: Web search requires an Ollama API key. Please set OLLAMA_API_KEY."
         return f"Error searching for '{query}': {error_msg}"
 
 

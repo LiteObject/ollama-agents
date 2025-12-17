@@ -34,7 +34,6 @@ except ImportError:
 # Load environment variables from .env file
 load_dotenv(override=True)
 
-import ollama
 from ollama import chat, ChatResponse, Message, ResponseError, RequestError
 
 from tools.custom.web_search_tools import web_search_smart, web_fetch_smart

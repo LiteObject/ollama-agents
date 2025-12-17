@@ -193,14 +193,31 @@ class EventHookRegistry:
         Args:
             event: Event type to trigger
             data: Event data (created from kwargs if not provided)
-            **kwargs: Arguments to create EventData if data not provided
+            **kwargs: Arguments to create EventData if data not provided.
+                      Known fields (agent_name, session_id, error, duration_ms)
+                      are passed directly; all others go into the 'data' dict.
         """
         if not self._enabled:
             return
 
         # Create event data if not provided
         if data is None:
-            data = EventData(event=event, **kwargs)
+            # Separate known EventData fields from extra data
+            known_fields = {"agent_name", "session_id", "error", "duration_ms"}
+            event_kwargs: Dict[str, Any] = {"event": event}
+            extra_data: Dict[str, Any] = {}
+
+            for key, value in kwargs.items():
+                if key in known_fields:
+                    event_kwargs[key] = value
+                else:
+                    extra_data[key] = value
+
+            # Add extra data to the 'data' dict field
+            if extra_data:
+                event_kwargs["data"] = extra_data
+
+            data = EventData(**event_kwargs)
 
         # Call event-specific hooks
         for callback in self._hooks.get(event, []):
