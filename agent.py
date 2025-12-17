@@ -1,11 +1,22 @@
 """
-Ollama Agent with Web Search Capabilities.
+Standalone Ollama Agent with Web Search Capabilities.
 
-This module provides an interactive agent that can use Ollama language models
-with web search and web fetch tools to answer questions and perform research.
+This module provides a standalone interactive CLI agent that does NOT use the
+multi-agent framework. It operates independently by calling Ollama directly
+and managing its own conversation loop.
 
-The agent maintains conversation context, handles tool calls automatically,
-and provides a user-friendly interface for multi-turn conversations.
+Features:
+- Direct Ollama SDK integration (ollama.chat)
+- Web search and web fetch tools
+- Multi-turn conversations with full context
+- Automatic tool call execution and error handling
+- Simple, self-contained implementation
+
+For multi-agent orchestration patterns (sequential, parallel, voting, etc.),
+use the core.Orchestrator with core.Agent and core.AgentConfig instead.
+
+Usage:
+    python agent.py
 """
 
 # pylint: disable=too-many-locals, too-many-nested-blocks, too-many-branches, too-many-statements, duplicate-code, wrong-import-position
