@@ -1,8 +1,83 @@
 """
 Orchestrator for coordinating multiple agents.
 
-This module provides an Orchestrator class that manages the execution
-of multiple agents in various patterns: sequential, parallel, conditional, etc.
+This module provides the Orchestrator class—the central coordinator that manages
+the creation and execution of multiple agents in various orchestration patterns.
+
+Architecture:
+    The Orchestrator follows a handler-based architecture where each execution
+    pattern (sequential, parallel, voting, etc.) has a dedicated handler class.
+    This design keeps the orchestrator lean while making it easy to add new
+    patterns without modifying core logic.
+
+Key Components:
+    - Agent Registry: Stores agents by name for easy lookup and execution
+    - Shared Context: Enables inter-agent communication and variable passing
+    - Pattern Handlers: Specialized classes for each orchestration pattern
+    - Tool Registry: Provides tools to all agents for consistent capabilities
+    - Event Hooks: Lifecycle events for observability and logging
+
+Execution Patterns:
+    The Orchestrator supports 17+ orchestration patterns:
+    - Sequential: Chain agents one after another, passing outputs as inputs
+    - Parallel: Run multiple agents simultaneously and collect results
+    - Conditional: Route based on agent output to different branches
+    - Loop: Repeat an agent until a condition is met
+    - Hierarchical: Supervisor delegates to workers, aggregates results
+    - Map-Reduce: Process items in parallel, then reduce to final result
+    - Pipeline: Chain agents with optional filter conditions
+    - Voting: Multiple agents vote, optionally aggregate consensus
+    - Debate: Agents debate a topic with optional moderator
+    - Supervisor: Supervisor reviews worker output and requests revisions
+    - Router: Classify input and route to specialist agents
+    - Ensemble: Combine responses from multiple agents
+    - State Machine: Define states and transitions, traverse based on logic
+    - Event-Driven: Process event stream routing to handlers
+    - Retry: Retry with fallback agents and validation
+    - Chain-of-Thought: Multi-step reasoning with explicit steps
+    - Creator-Critic: Iterative improvement with peer feedback
+    - Planner-Executor: Goal decomposition and step-by-step execution
+
+Inter-Agent Communication:
+    Agents communicate through SharedContext, a thread-safe dictionary:
+    - Variables are set by agents: context.set("key", value)
+    - Retrieved by subsequent agents: context.get("key")
+    - Prompt templates use {variable} syntax to inject context
+
+    Example:
+        orchestrator.run_sequential([
+            ("researcher", "Research {topic}"),
+            ("writer", "Write about: {researcher}"),  # Uses previous output
+        ], initial_vars={"topic": "AI trends"})
+
+Execution Flow:
+    1. User calls run_sequential(), run_parallel(), etc. with steps/prompts
+    2. Orchestrator dispatches to the appropriate handler
+    3. Handler interpolates variables from context into prompts
+    4. Handler runs agents in the pattern's sequence
+    5. Agent outputs are stored back in context
+    6. Handler returns final result
+
+Usage Example:
+    # Create orchestrator
+    orchestrator = Orchestrator()
+
+    # Add agents
+    orchestrator.add_agent(AgentConfig(name="researcher", model="qwen3:14b", ...))
+    orchestrator.add_agent(AgentConfig(name="writer", model="qwen3:14b", ...))
+
+    # Run sequential workflow
+    result = orchestrator.run_sequential([
+        ("researcher", "Research {topic}"),
+        ("writer", "Write article based on: {researcher}"),
+    ], initial_vars={"topic": "AI trends"})
+
+Design Patterns:
+    - Handler Pattern: Each orchestration pattern has a dedicated handler
+    - Strategy Pattern: Different strategies for pattern execution
+    - Context Pattern: Shared mutable state for inter-agent communication
+    - Registry Pattern: Agent and tool registries for lookup and management
+    - Observer Pattern: Event hooks for lifecycle observability
 """
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-public-methods, too-many-instance-attributes
