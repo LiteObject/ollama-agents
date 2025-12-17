@@ -36,6 +36,9 @@ from core.observability.hooks import (
 from core.observability.logging import AgentLogger, get_logger
 from core.tools import ToolRegistry, default_registry
 
+# Import smart web search tools for automatic freshness detection
+from tools.custom.web_search_tools import web_search_smart, web_fetch_smart
+
 
 class Agent:
     """A configurable AI agent powered by Ollama for multi-agent orchestration.
@@ -139,10 +142,10 @@ class Agent:
 
     def _load_tools(self) -> None:
         """Load tools from the registry based on config."""
-        # Add builtin Ollama tools
+        # Add builtin Ollama tools with smart wrappers for freshness detection
         builtin_tools = {
-            "web_search": ollama.web_search,
-            "web_fetch": ollama.web_fetch,
+            "web_search": web_search_smart,
+            "web_fetch": web_fetch_smart,
         }
 
         for tool_name in self.config.tools:

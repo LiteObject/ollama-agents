@@ -37,8 +37,11 @@ load_dotenv(override=True)
 import ollama
 from ollama import chat, ChatResponse, Message, ResponseError, RequestError
 
+from tools.custom.web_search_tools import web_search_smart, web_fetch_smart
+
 # Define available tools as a constant for easier configuration
-AVAILABLE_TOOLS: List[Callable[..., Any]] = [ollama.web_search, ollama.web_fetch]
+# Uses smart wrappers that auto-detect time-sensitive queries for freshness
+AVAILABLE_TOOLS: List[Callable[..., Any]] = [web_search_smart, web_fetch_smart]
 
 
 def message_to_dict(message: Message) -> Dict[str, Any]:
