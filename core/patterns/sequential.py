@@ -84,6 +84,9 @@ class SequentialHandler(PatternHandler):
                 prompt, context=self.orchestrator._context, verbose=verbose
             )
 
+            # Store output in context so next agent can access it
+            self.orchestrator._context.set(agent_name, last_output)
+
             if verbose:
                 print(f"\n[{agent_name}] Output: {last_output[:500]}...")
 
