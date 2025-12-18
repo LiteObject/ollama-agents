@@ -2,7 +2,7 @@
 # This agent specializes in creating well-written content
 
 name: writer
-model: gpt-oss:20b
+model: llama3.2:latest
 description: "A writing specialist that creates clear, engaging content"
 
 system_prompt: |
@@ -16,6 +16,6 @@ system_prompt: |
 
 tools: []
 
-think: true
+think: false
 max_iterations: 3
 temperature: 0.8

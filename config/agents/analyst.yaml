@@ -14,7 +14,7 @@ system_prompt: |
   
   Be objective and thorough. Support conclusions with evidence.
 
-tools: []
+tools: [web_search, web_fetch]
 
 think: true
 max_iterations: 3
